@@ -1,0 +1,159 @@
+AI-Powered Resume Screening
+import fitz
+
+
+def extract_text_from_pdf(file_path):
+    document = fitz.open(file_path)
+
+    text = ""
+
+    for page in document:
+        text += page.get_text()
+
+    document.close()
+
+    return text
+from sentence_transformers import SentenceTransformer
+
+model = SentenceTransformer("all-MiniLM-L6-v2")
+
+
+def generate_embedding(text):
+    return model.encode(text)
+from sklearn.metrics.pairwise import cosine_similarity
+from .embeddings import generate_embedding
+
+
+def calculate_similarity(resume, job_description):
+
+    resume_embedding = generate_embedding(resume)
+    job_embedding = generate_embedding(job_description)
+
+    score = cosine_similarity(
+        [resume_embedding],
+        [job_embedding]
+    )[0][0]
+
+    return float(score)
+import pandas as pd
+from src.matcher import calculate_similarity
+
+
+def recommend_jobs(resume_text):
+
+    jobs = pd.read_csv("data/jobs.csv")
+
+    results = []
+
+    for _, job in jobs.iterrows():
+
+        score = calculate_similarity(
+            resume_text,
+            job["description"]
+        )
+
+        results.append({
+            "title": job["title"],
+            "score": score
+        })
+
+    results.sort(
+        key=lambda x: x["score"],
+        reverse=True
+    )
+
+    return results[:5]
+import streamlit as st
+from src.pdf_reader import extract_text_from_pdf
+from src.recommender import recommend_jobs
+
+st.title("AI Resume Screening & Job Recommendation")
+
+st.write(
+    "Upload your resume and get AI-powered job recommendations."
+)
+
+uploaded_file = st.file_uploader(
+    "Upload Resume",
+    type=["pdf"]
+)
+
+if uploaded_file:
+
+    with open("temp_resume.pdf", "wb") as f:
+        f.write(uploaded_file.read())
+
+    resume_text = extract_text_from_pdf(
+        "temp_resume.pdf"
+    )
+
+    st.subheader("Extracted Resume")
+
+    st.text_area(
+        "Resume Text",
+        resume_text,
+        height=250
+    )
+
+    if st.button("Recommend Jobs"):
+
+        results = recommend_jobs(resume_text)
+
+        st.subheader("Recommended Jobs")
+
+        for i, result in enumerate(results):
+
+            percentage = result["score"] * 100
+
+            st.write(
+                f"{i+1}. {result['title']} — "
+                f"{percentage:.2f}% match"
+            )
+
+            st.progress(
+                min(result["score"], 1.0)
+            )
+output
+
+AI Resume Screening & Job Recommendation
+
+Upload your resume and get AI-powered job recommendations.
+
+[Browse files]
+
+Upload Resume
+
+After you upload a PDF resume:
+
+Extracted Resume
+
+┌──────────────────────────────────────────────────────────────┐
+│ IRUGU NAVEEN                                                 │
+│ Software Engineer                                            │
+│                                                             │
+│ Education: B.Tech                                           │
+│ Skills: Python, Java, SQL, HTML, CSS, Machine Learning      │
+│ Communication Skills                                         │
+│                                                             │
+│ Projects: AI Resume Screening System                        │
+│ ...                                                         │
+└──────────────────────────────────────────────────────────────┘
+
+                         [Recommend Jobs]
+
+Recommended Jobs
+
+1. Python Developer — 86.42% match
+██████████████████████████████████████
+
+2. Software Engineer — 82.17% match
+████████████████████████████████████
+
+3. Machine Learning Engineer — 76.35% match
+██████████████████████████████
+
+4. Data Analyst — 69.84% match
+████████████████████████████
+
+5. Web Developer — 63.27% match
+██████████████████████████
